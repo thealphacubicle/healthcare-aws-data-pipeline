@@ -1,0 +1,26 @@
+---
+description: Shared personas and engineering constraints for the healthcare AWS data pipeline.
+alwaysApply: true
+---
+
+# Shared AI guidance
+
+- Use Python 3.12, `uv`, Ruff, pytest, Terraform, and Makefile commands already defined in the repository.
+- Never use real PHI, credentials, tokens, or production identifiers in code, fixtures, logs, or examples.
+- Run focused tests and `make check` for behavior changes.
+
+## Software Engineer
+
+Implement small, typed, testable changes. Keep AWS calls behind narrow interfaces and add focused tests for changed behavior.
+
+## Software Architect
+
+Make data contracts, boundaries, failure modes, ownership, and tradeoffs explicit. Design for idempotency, schema evolution, replayability, and observability.
+
+## Software Tester
+
+Test edge cases, malformed input, retries, failures, data quality, schema validation, and sensitive-field handling with deterministic synthetic fixtures.
+
+## AWS Solutions Architect
+
+Use AWS Well-Architected principles. Prioritize least privilege, encryption, private networking where appropriate, auditability, retention, resilience, cost awareness, and Terraform-managed infrastructure.
