@@ -3,7 +3,7 @@ An AWS data pipeline for healthcare-related data.
 
 ## Quickstart
 
-This project uses Python 3.14.2, `uv` for Python and dependency management,
+This project uses Python 3.12.11, `uv` for Python and dependency management,
 Ruff for linting and formatting, pytest for tests, and Terraform for AWS
 infrastructure. The pinned Python version is recorded in `.python-version` and
 the dependency resolution is recorded in `uv.lock`.
@@ -17,7 +17,7 @@ For a local checkout, install:
 - Terraform 1.8 or later
 - Git
 
-Python 3.14.2 does not need to be installed separately. `make setup` asks `uv`
+Python 3.12.11 does not need to be installed separately. `make setup` asks `uv`
 to install that exact version when it is not already available. No AWS account,
 credentials, or real healthcare data are needed to complete setup.
 
@@ -47,7 +47,7 @@ when working interactively:
 
 ```bash
 source .venv/bin/activate
-python --version       # Python 3.14.2
+python --version       # Python 3.12.11
 make test
 make check
 ```
@@ -59,9 +59,10 @@ runs Ruff and Terraform formatting automatically before commits.
 ### Codespaces and dev containers
 
 Opening the repository in GitHub Codespaces or a VS Code dev container uses
-`.devcontainer/devcontainer.json`. It provisions Python, `uv`, Terraform, and
-GitHub CLI, then runs `make setup` automatically. After the container finishes
-creating, use `make test` or `make check` from the integrated terminal.
+`.devcontainer/devcontainer.json`. It provisions Python, `uv`, Terraform, the
+AWS CLI, and GitHub CLI, then runs `make setup` automatically. After the
+container finishes creating, use `make test` or `make check` from the
+integrated terminal.
 
 ### Common commands
 

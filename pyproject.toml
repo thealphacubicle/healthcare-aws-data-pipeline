@@ -3,7 +3,7 @@ name = "healthcare-aws-data-pipeline"
 version = "0.1.0"
 description = "An AWS data pipeline for healthcare-related data."
 readme = "README.md"
-requires-python = ">=3.14.2"
+requires-python = ">=3.12.11"
 dependencies = [
     "boto3>=1.35",
     "botocore>=1.35",
@@ -20,7 +20,7 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py314"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

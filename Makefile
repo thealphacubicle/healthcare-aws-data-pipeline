@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := setup
 
-PYTHON_VERSION := 3.14.2
+PYTHON_VERSION := 3.12.11
 UV := uv
 
 .PHONY: setup install test lint fmt fmt-check terraform-fmt terraform-fmt-check check
