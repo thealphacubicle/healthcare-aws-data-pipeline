@@ -36,3 +36,11 @@ jobs:
 
       - name: Run tests
         run: make test
+
+      - name: Build Lambda and dashboard bundles
+        run: make build
+
+      - name: Validate Terraform
+        run: |
+          terraform -chdir=infra init -backend=false -input=false
+          terraform -chdir=infra validate
