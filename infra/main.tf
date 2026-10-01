@@ -11,4 +11,26 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = var.project
+      Environment = var.environment
+      ManagedBy   = "terraform"
+    }
+  }
+}
+
+data "aws_caller_identity" "current" {}
+data "aws_partition" "current" {}
+
+locals {
+  name       = "${var.project}-${var.environment}"
+  account_id = data.aws_caller_identity.current.account_id
+  partition  = data.aws_partition.current.partition
+  build_dir  = "${path.module}/../build"
+
+  # Prefixes inside the curated bucket; must match transform/handlers.py.
+  curated_tables_prefix  = "tables"
+  curated_staging_prefix = "staging"
 }

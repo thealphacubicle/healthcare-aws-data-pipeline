@@ -3,7 +3,8 @@
 PYTHON_VERSION := 3.12.11
 UV := uv
 
-.PHONY: setup install test lint fmt fmt-check terraform-fmt terraform-fmt-check check
+.PHONY: setup install test lint fmt fmt-check terraform-fmt terraform-fmt-check check build \
+	terraform-validate register-table-ddl
 
 setup:
 	@set -eu; \
@@ -43,3 +44,14 @@ terraform-fmt-check:
 	terraform fmt -check -recursive
 
 check: lint fmt-check terraform-fmt-check
+
+build:
+	uv run python scripts/build_lambdas.py
+
+terraform-validate: build
+	terraform -chdir=infra init -backend=false -input=false
+	terraform -chdir=infra validate
+
+# Usage: make register-table-ddl BUCKET=<curated-bucket> [DATABASE=healthcare]
+register-table-ddl:
+	uv run python scripts/register_table.py --database $(or $(DATABASE),healthcare) --bucket $(BUCKET)

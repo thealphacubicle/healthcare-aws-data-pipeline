@@ -1,6 +1,54 @@
 # healthcare-aws-data-pipeline
 An AWS data pipeline for healthcare-related data.
 
+## Architecture
+
+```
+Google Drive folder
+   │  EventBridge schedule → ingest Lambda (incremental, watermark in S3)
+   ▼
+S3 raw zone   ingest_date=YYYY-MM-DD/run_id=…/<file>.csv + _manifest.json
+   │  S3 → EventBridge rule on */_manifest.json (one execution per run)
+   ▼
+Step Functions: PrepareRun → Map(CleanDataset) → JoinDatasets → DeriveAndPublish
+   ▼
+S3 curated zone   tables/patient_summary/part-<run_id>.parquet
+   │  Glue Data Catalog table, registered once by hand (no crawler)
+   ▼
+Athena workgroup (per-query scan cap)  ◄──  Streamlit on EC2 t3.micro
+```
+
+Guardrails: a $0.01 monthly AWS Budget with a 1% email alert and a budget
+action that stops the EC2 instance at 100%, plus SNS email on ingestion or ETL
+failure.
+
+| Path | Purpose |
+|---|---|
+| `src/healthcare_pipeline/pipeline_config.json` | Declares the master file, supporting files, column types, and derived fields |
+| `src/healthcare_pipeline/ingest.py` | Drive → raw zone Lambda |
+| `src/healthcare_pipeline/transform/` | Clean, join, derive, and Parquet steps run by Step Functions |
+| `src/healthcare_pipeline/catalog.py`, `scripts/register_table.py` | One-time Glue table registration (DDL or `boto3`) |
+| `app/streamlit_app.py` | Dashboard |
+| `infra/` | Terraform for everything above; see [`infra/README.md`](infra/README.md) to deploy |
+
+### Adding the supporting files
+
+`pipeline_config.json` ships with a synthetic example: a `patients` master and
+two supporting files. To add your files:
+
+1. Add one entry per file under `supporting`. Give it the exact Drive file
+   name, the join key column, and every column you need with its type
+   (`string`, `bigint`, `double`, `boolean`, `date`, `timestamp`). Column names
+   are matched after they're normalized to snake_case, and must be unique
+   across files.
+2. Each supporting file must have **one row per join key**. The pipeline fails
+   loudly rather than fan out rows. Pre-aggregate detail files (for example,
+   one row per encounter) to one row per key first.
+3. Add any derived columns under `derived` and implement them in
+   `transform/derive.py`.
+4. Run `make test`, then re-register the table with
+   `scripts/register_table.py --apply --replace`.
+
 ## Quickstart
 
 This project uses Python 3.12.11, `uv` for Python and dependency management,
@@ -73,6 +121,8 @@ make lint               # Run Ruff checks
 make fmt                # Format Python files with Ruff
 make terraform-fmt      # Format Terraform files
 make check              # Run lint, Python format, and Terraform format checks
+make build              # Build Lambda and dashboard bundles into build/
+make terraform-validate # Build, then terraform init/validate in infra/
 ```
 
 The repository includes shared Copilot custom agents under `.github/agents/`
