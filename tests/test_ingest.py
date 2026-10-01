@@ -1,12 +1,13 @@
 import json
 from datetime import UTC, datetime
 
+import pytest
 from fakes import FakeDrive, FakeS3
 from sample_data import FILES
 
 from healthcare_pipeline.config import load_config
 from healthcare_pipeline.drive import build_query
-from healthcare_pipeline.ingest import STATE_KEY, run_ingestion
+from healthcare_pipeline.ingest import STATE_KEY, StateConflictError, run_ingestion
 
 BUCKET = "raw"
 
@@ -84,6 +85,42 @@ def test_incomplete_dataset_set_does_not_write_manifest_or_start_etl() -> None:
     assert result["manifest_key"] is None
     assert result["missing"] == ["encounters_summary", "insurance"]
     assert not any(k.endswith("_manifest.json") for k in s3.keys(BUCKET))
+    assert etl_calls == []
+
+
+def test_watermark_does_not_advance_until_all_datasets_seen() -> None:
+    drive, s3 = FakeDrive(), FakeS3()
+    drive.add("p", "patients.csv", "2026-09-30T10:00:00.000Z", FILES["patients.csv"])
+    _run(drive, s3, datetime(2026, 10, 1, 6, tzinfo=UTC))
+    assert json.loads(s3.objects[(BUCKET, STATE_KEY)])["watermark"] is None
+
+    # Files moved into the folder keep their older modifiedTime.
+    drive.add(
+        "e", "encounters_summary.csv", "2026-01-01T00:00:00.000Z", FILES["encounters_summary.csv"]
+    )
+    drive.add("i", "insurance.csv", "2026-01-01T00:00:00.000Z", FILES["insurance.csv"])
+    etl_calls: list = []
+    result = _run(drive, s3, datetime(2026, 10, 2, 6, tzinfo=UTC), etl_calls)
+
+    assert result["changed"] == ["encounters_summary", "insurance"]
+    assert result["watermark"] == "2026-09-30T10:00:00.000Z"
+    assert len(etl_calls) == 1
+
+
+def test_concurrent_state_update_aborts_without_starting_etl() -> None:
+    drive, s3, etl_calls = _drive_with_all_files(), FakeS3(), []
+
+    class RacingDrive(FakeDrive):
+        def list_files(self, folder_id, modified_since):
+            # Another run commits state while this one is in progress.
+            s3.put_object(Bucket=BUCKET, Key=STATE_KEY, Body=b'{"watermark": null, "datasets": {}}')
+            return drive.list_files(folder_id, modified_since)
+
+        def download(self, file):
+            return drive.download(file)
+
+    with pytest.raises(StateConflictError):
+        _run(RacingDrive(), s3, datetime(2026, 10, 1, 6, tzinfo=UTC), etl_calls)
     assert etl_calls == []
 
 

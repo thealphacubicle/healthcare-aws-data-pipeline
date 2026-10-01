@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 
+from botocore.exceptions import ClientError
+
 from healthcare_pipeline.drive import DriveFile
 
 
@@ -14,20 +16,40 @@ class FakeS3:
 
     def __init__(self) -> None:
         self.objects: dict[tuple[str, str], bytes] = {}
+        self.etags: dict[tuple[str, str], str] = {}
+        self._versions = 0
 
-    def put_object(self, *, Bucket: str, Key: str, Body: bytes, **_: object) -> dict:
+    def put_object(
+        self,
+        *,
+        Bucket: str,
+        Key: str,
+        Body: bytes,
+        IfMatch: str | None = None,
+        IfNoneMatch: str | None = None,
+        **_: object,
+    ) -> dict:
+        current = self.etags.get((Bucket, Key))
+        if (IfMatch is not None and IfMatch != current) or (
+            IfNoneMatch == "*" and current is not None
+        ):
+            raise ClientError({"Error": {"Code": "PreconditionFailed"}}, "PutObject")
+        self._versions += 1
         self.objects[(Bucket, Key)] = Body
-        return {}
+        self.etags[(Bucket, Key)] = f'"v{self._versions}"'
+        return {"ETag": self.etags[(Bucket, Key)]}
 
     def get_object(self, *, Bucket: str, Key: str) -> dict:
         try:
-            return {"Body": io.BytesIO(self.objects[(Bucket, Key)])}
+            body = self.objects[(Bucket, Key)]
         except KeyError:
             raise self.exceptions.NoSuchKey(Key) from None
+        return {"Body": io.BytesIO(body), "ETag": self.etags[(Bucket, Key)]}
 
     def delete_objects(self, *, Bucket: str, Delete: dict) -> dict:
         for obj in Delete["Objects"]:
             self.objects.pop((Bucket, obj["Key"]), None)
+            self.etags.pop((Bucket, obj["Key"]), None)
         return {}
 
     def keys(self, bucket: str, prefix: str = "") -> list[str]:

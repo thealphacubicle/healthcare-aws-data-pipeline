@@ -55,12 +55,6 @@ variable "glue_database_name" {
   default     = "healthcare"
 }
 
-variable "curated_table_name" {
-  description = "Curated table name; must match output_table in pipeline_config.json."
-  type        = string
-  default     = "patient_summary"
-}
-
 variable "athena_bytes_scanned_cutoff" {
   description = "Per-query scan limit enforced by the Athena workgroup, in bytes (minimum 10 MB)."
   type        = number

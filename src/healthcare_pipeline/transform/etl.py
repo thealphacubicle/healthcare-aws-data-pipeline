@@ -69,28 +69,58 @@ def run_etl(
     derived = compute_derived_fields(config, joined, date.fromisoformat(manifest["ingest_date"]))
     table = to_curated_table(derived, config.output_columns())
 
-    # 4. Publish: write the new snapshot first, then delete the previous one,
-    # so the Athena table location is never empty.
+    # 4. Publish (version-aware, so out-of-order async runs never roll back):
+    # run_ids sort chronologically. Skip if a newer snapshot already exists,
+    # write ours, then delete only older snapshots. The table location is
+    # never empty and a newer snapshot is never deleted by an older run.
     prefix = f"{tables_prefix}/{config.output_table}/"
     new_key = f"{prefix}part-{run_id}.parquet"
-    s3.put_object(Bucket=curated_bucket, Key=new_key, Body=table_to_parquet_bytes(table))
-
-    stale = []
-    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=curated_bucket, Prefix=prefix):
-        stale.extend({"Key": o["Key"]} for o in page.get("Contents", []) if o["Key"] != new_key)
-    for i in range(0, len(stale), 1000):
-        s3.delete_objects(
-            Bucket=curated_bucket, Delete={"Objects": stale[i : i + 1000], "Quiet": True}
-        )
-
-    logger.info("Published %d rows to s3://%s/%s", table.num_rows, curated_bucket, new_key)
-    return {
+    summary = {
         "run_id": run_id,
         "curated_key": new_key,
         "rows": table.num_rows,
         "columns": table.num_columns,
         "reports": reports,
     }
+    if _snapshots_newer_than(s3, curated_bucket, prefix, run_id):
+        logger.warning("Run %s superseded by a newer snapshot; not publishing", run_id)
+        return {**summary, "status": "superseded"}
+
+    s3.put_object(Bucket=curated_bucket, Key=new_key, Body=table_to_parquet_bytes(table))
+
+    # A newer run may have published while we were writing; if so, step aside.
+    if _snapshots_newer_than(s3, curated_bucket, prefix, run_id):
+        s3.delete_objects(Bucket=curated_bucket, Delete={"Objects": [{"Key": new_key}]})
+        logger.warning("Run %s superseded during publish; removed its snapshot", run_id)
+        return {**summary, "status": "superseded"}
+
+    stale = [
+        {"Key": key}
+        for key in _list_snapshots(s3, curated_bucket, prefix)
+        if _run_id_of(key, prefix) < run_id
+    ]
+    for i in range(0, len(stale), 1000):
+        s3.delete_objects(
+            Bucket=curated_bucket, Delete={"Objects": stale[i : i + 1000], "Quiet": True}
+        )
+
+    logger.info("Published %d rows to s3://%s/%s", table.num_rows, curated_bucket, new_key)
+    return {**summary, "status": "published"}
+
+
+def _list_snapshots(s3, bucket: str, prefix: str) -> list[str]:
+    keys = []
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+        keys.extend(o["Key"] for o in page.get("Contents", []))
+    return keys
+
+
+def _run_id_of(key: str, prefix: str) -> str:
+    return key[len(prefix) :].removeprefix("part-").removesuffix(".parquet")
+
+
+def _snapshots_newer_than(s3, bucket: str, prefix: str, run_id: str) -> bool:
+    return any(_run_id_of(k, prefix) > run_id for k in _list_snapshots(s3, bucket, prefix))
 
 
 def handler(event: dict, context: Any) -> dict[str, Any]:

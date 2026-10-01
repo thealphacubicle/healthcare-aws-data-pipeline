@@ -17,6 +17,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
+from botocore.exceptions import ClientError
+
 from healthcare_pipeline.config import PipelineConfig, load_config
 from healthcare_pipeline.drive import DriveFile, DriveSource
 
@@ -27,12 +29,37 @@ STATE_KEY = "_state/ingest_state.json"
 MANIFEST_NAME = "_manifest.json"
 
 
-def load_state(s3, bucket: str) -> dict[str, Any]:
+class StateConflictError(RuntimeError):
+    """Another ingestion run updated the state file while this one was running."""
+
+
+def load_state(s3, bucket: str) -> tuple[dict[str, Any], str | None]:
+    """Return the ingest state and its ETag (None if no state exists yet)."""
     try:
-        body = s3.get_object(Bucket=bucket, Key=STATE_KEY)["Body"].read()
+        response = s3.get_object(Bucket=bucket, Key=STATE_KEY)
     except s3.exceptions.NoSuchKey:
-        return {"watermark": None, "datasets": {}}
-    return json.loads(body)
+        return {"watermark": None, "datasets": {}}, None
+    return json.loads(response["Body"].read()), response["ETag"]
+
+
+def save_state(s3, bucket: str, state: dict[str, Any], etag: str | None) -> None:
+    """Write the state only if nobody else changed it since ``load_state``.
+
+    S3 conditional writes act as an optimistic lock, so overlapping runs
+    cannot silently overwrite each other's watermark.
+    """
+    condition = {"IfMatch": etag} if etag else {"IfNoneMatch": "*"}
+    try:
+        s3.put_object(
+            Bucket=bucket, Key=STATE_KEY, Body=json.dumps(state, indent=2).encode(), **condition
+        )
+    except ClientError as error:
+        code = error.response.get("Error", {}).get("Code")
+        if code in {"PreconditionFailed", "ConditionalRequestConflict"}:
+            raise StateConflictError(
+                "Ingest state changed during this run; not starting ETL"
+            ) from error
+        raise
 
 
 def select_changed_files(
@@ -73,7 +100,7 @@ def run_ingestion(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     now = now or datetime.now(UTC)
-    state = load_state(s3, bucket)
+    state, state_etag = load_state(s3, bucket)
     files = drive.list_files(folder_id, state["watermark"])
     changed = select_changed_files(config, files, state)
     if not changed:
@@ -95,10 +122,18 @@ def run_ingestion(
             "Uploaded %s (modified %s) to s3://%s/%s", file.name, file.modified_time, bucket, key
         )
 
-    watermark = max([state["watermark"] or "", *(f.modified_time for f in changed.values())])
+    missing = [d.name for d in config.datasets if d.name not in datasets]
+    if missing:
+        # Keep the old watermark until every dataset has been seen: a missing
+        # file may carry an older modifiedTime (e.g. moved into the folder)
+        # and must still match the next run's query.
+        watermark = state["watermark"]
+    else:
+        watermark = max(
+            [state["watermark"] or "", *(d["modified_time"] for d in datasets.values())]
+        )
     new_state = {"watermark": watermark, "datasets": datasets}
 
-    missing = [d.name for d in config.datasets if d.name not in datasets]
     manifest_key = None
     if missing:
         # The join needs every file; wait for the rest to appear in Drive.
@@ -117,11 +152,12 @@ def run_ingestion(
             Body=json.dumps(manifest, indent=2).encode(),
             ContentType="application/json",
         )
-        if start_etl is not None:
-            start_etl({"bucket": bucket, "manifest_key": manifest_key})
 
-    # State is written last so a failed run is simply retried next time.
-    s3.put_object(Bucket=bucket, Key=STATE_KEY, Body=json.dumps(new_state, indent=2).encode())
+    # Commit point: if this fails (error or concurrent run), no ETL starts and
+    # the next run re-ingests from the previous state.
+    save_state(s3, bucket, new_state, state_etag)
+    if manifest_key and start_etl is not None:
+        start_etl({"bucket": bucket, "manifest_key": manifest_key})
     return {
         "status": "ingested",
         "run_id": run_id,

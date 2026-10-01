@@ -123,6 +123,7 @@ def test_etl_runs_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
         curated_bucket="curated",
     )
 
+    assert result["status"] == "published"
     assert result["curated_key"] == "tables/patient_summary/part-r1.parquet"
     assert (result["rows"], result["columns"]) == (3, 12)
     assert [r["dataset"] for r in result["reports"]] == [
@@ -134,3 +135,26 @@ def test_etl_runs_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
     assert s3.keys("curated") == ["tables/patient_summary/part-r1.parquet"]
     table = pq.read_table(io.BytesIO(s3.objects[("curated", result["curated_key"])]))
     assert table.column("age_years").to_pylist() == [46, 16, None]
+
+
+def test_etl_does_not_overwrite_a_newer_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    s3 = FakeS3()
+    monkeypatch.setattr(etl, "_s3", s3)
+    for name, content in FILES.items():
+        s3.put_object(Bucket="raw", Key=name, Body=content)
+    manifest = {
+        "run_id": "20261001T060000Z",
+        "ingest_date": "2026-10-01",
+        "changed": [],
+        "datasets": {spec.name: spec.file_name for spec in CONFIG.datasets},
+    }
+    s3.put_object(Bucket="raw", Key="m.json", Body=json.dumps(manifest).encode())
+    newer = "tables/patient_summary/part-20261002T060000Z.parquet"
+    s3.put_object(Bucket="curated", Key=newer, Body=b"newer")
+
+    result = etl.run_etl(
+        config=CONFIG, raw_bucket="raw", manifest_key="m.json", curated_bucket="curated"
+    )
+
+    assert result["status"] == "superseded"
+    assert s3.keys("curated") == [newer]

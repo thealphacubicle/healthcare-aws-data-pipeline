@@ -153,7 +153,7 @@ resource "aws_instance" "dashboard" {
     app_s3_uri = "s3://${aws_s3_bucket.this["artifacts"].id}/${aws_s3_object.dashboard_app.key}"
     region     = var.aws_region
     database   = aws_glue_catalog_database.this.name
-    table      = var.curated_table_name
+    table      = local.curated_table_name
     workgroup  = aws_athena_workgroup.this.name
   })
 
