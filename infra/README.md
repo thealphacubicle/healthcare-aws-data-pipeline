@@ -11,7 +11,6 @@ layers:
 | `catalog.tf` | 4–5. Glue database (no crawler, no table) and Athena workgroup |
 | `dashboard.tf` | 6. EC2 Streamlit host on a public URL |
 | `guardrails.tf` | 7. $5 budget, 1% alert, stop-EC2 budget action |
-| `alerts.tf` | SNS email when the ingest or ETL Lambda fails |
 
 State is local by default. Configure a remote backend before any shared or
 production deployment.
@@ -41,8 +40,6 @@ production deployment.
    terraform -chdir=infra init
    terraform -chdir=infra apply
    ```
-
-   Confirm the SNS subscription email AWS sends to `alert_email`.
 
 4. **Register the curated table (one time).** Print the DDL and run it in the
    Athena query editor (select the `healthcare-pipeline-dev` workgroup), or add
@@ -85,8 +82,9 @@ production deployment.
   query over `athena_bytes_scanned_cutoff` (1 GB by default). The dashboard
   caches results for an hour.
 - **Direct Lambda chaining.** The ingest Lambda invokes the ETL Lambda
-  asynchronously, so ingestion finishes right away. A failed ETL run is retried
-  once, then emailed through SNS. The only EventBridge piece left is the
+  asynchronously, so ingestion finishes right away. A failed run is retried once.
+  There are no failure emails, so check the Lambda logs in CloudWatch if the
+  dashboard looks stale. The only EventBridge piece left is the
   ingestion schedule, which is the standard (free) way to run a Lambda on a
   timer. The ETL runs every step in one invocation, so the whole dataset must
   fit in Lambda memory (`transform_memory_mb`, up to 10 GB) and finish within

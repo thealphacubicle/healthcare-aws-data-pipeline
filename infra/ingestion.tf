@@ -49,12 +49,6 @@ data "aws_iam_policy_document" "ingest" {
   }
 
   statement {
-    sid       = "NotifyOnFailure"
-    actions   = ["sns:Publish"]
-    resources = [aws_sns_topic.alerts.arn]
-  }
-
-  statement {
     sid       = "WriteLogs"
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["${aws_cloudwatch_log_group.ingest.arn}:*"]
@@ -96,12 +90,6 @@ resource "aws_lambda_function" "ingest" {
 resource "aws_lambda_function_event_invoke_config" "ingest" {
   function_name          = aws_lambda_function.ingest.function_name
   maximum_retry_attempts = 1
-
-  destination_config {
-    on_failure {
-      destination = aws_sns_topic.alerts.arn
-    }
-  }
 }
 
 resource "aws_cloudwatch_event_rule" "ingest_schedule" {

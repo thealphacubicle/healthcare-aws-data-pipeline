@@ -145,8 +145,8 @@ def _lambda_invoker(function_name: str) -> Callable[[dict[str, str]], None]:
     lambda_client = boto3.client("lambda")
 
     def invoke(payload: dict[str, str]) -> None:
-        # "Event" = asynchronous: returns once queued; failures go to the
-        # ETL function's on-failure destination (SNS email).
+        # "Event" = asynchronous: returns once queued. Lambda retries a failed
+        # ETL run once; errors are in the ETL function's CloudWatch logs.
         lambda_client.invoke(
             FunctionName=function_name,
             InvocationType="Event",

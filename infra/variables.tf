@@ -17,7 +17,7 @@ variable "environment" {
 }
 
 variable "alert_email" {
-  description = "Email address for budget alerts and pipeline failure notifications."
+  description = "Email address for AWS Budget alerts."
   type        = string
 }
 

@@ -20,8 +20,7 @@ Athena workgroup (per-query scan cap)  ◄──  Streamlit on EC2 t3.micro
 ```
 
 Guardrails: a $5 monthly AWS Budget with a 1% email alert and a budget action
-that stops the EC2 instance at 100%, plus SNS email on ingestion or ETL
-failure.
+that stops the EC2 instance at 100%.
 
 | Path | Purpose |
 |---|---|

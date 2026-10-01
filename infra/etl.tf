@@ -28,12 +28,6 @@ data "aws_iam_policy_document" "etl" {
   }
 
   statement {
-    sid       = "NotifyOnFailure"
-    actions   = ["sns:Publish"]
-    resources = [aws_sns_topic.alerts.arn]
-  }
-
-  statement {
     sid       = "WriteLogs"
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["${aws_cloudwatch_log_group.etl.arn}:*"]
@@ -71,14 +65,8 @@ resource "aws_lambda_function" "etl" {
   depends_on = [aws_cloudwatch_log_group.etl, aws_iam_role_policy.etl]
 }
 
-# Asynchronous invocations retry once, then email the alerts topic.
+# Retry a failed asynchronous run once; failures show up in CloudWatch Logs.
 resource "aws_lambda_function_event_invoke_config" "etl" {
   function_name          = aws_lambda_function.etl.function_name
   maximum_retry_attempts = 1
-
-  destination_config {
-    on_failure {
-      destination = aws_sns_topic.alerts.arn
-    }
-  }
 }
