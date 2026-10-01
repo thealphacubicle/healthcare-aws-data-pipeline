@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installs uv and runs the Streamlit dashboard as a systemd service.
+# Installs uv and runs the Streamlit dashboard on port 80 as a systemd service.
 # The unit re-downloads app.zip on every start, so after `terraform apply`
 # updates the code, `sudo systemctl restart dashboard` picks it up.
 set -euo pipefail
@@ -32,11 +32,13 @@ Environment=ATHENA_DATABASE=${database}
 Environment=ATHENA_TABLE=${table}
 Environment=ATHENA_WORKGROUP=${workgroup}
 Environment=PYTHONPATH=/opt/dashboard/app
+# Lets the unprivileged service user bind port 80.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 ExecStartPre=/usr/local/bin/dashboard-fetch
 ExecStart=/usr/local/bin/uv run --no-project --python 3.12 \
   --with "streamlit>=1.40" --with "boto3>=1.35" --with "pandas>=2.2" \
   streamlit run /opt/dashboard/app/streamlit_app.py \
-  --server.port 8501 --server.address 0.0.0.0 --server.headless true \
+  --server.port 80 --server.address 0.0.0.0 --server.headless true \
   --browser.gatherUsageStats false
 Restart=on-failure
 RestartSec=10

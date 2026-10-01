@@ -32,18 +32,7 @@ def to_curated_table(df: pd.DataFrame, columns: list[tuple[str, str]]) -> pa.Tab
     return table.cast(arrow_schema(columns))
 
 
-def frame_to_parquet_bytes(df: pd.DataFrame) -> bytes:
-    """Intermediate (staging) files keep pandas dtypes for the next step."""
-    buffer = io.BytesIO()
-    df.to_parquet(buffer, engine="pyarrow", index=False)
-    return buffer.getvalue()
-
-
 def table_to_parquet_bytes(table: pa.Table) -> bytes:
     buffer = io.BytesIO()
     pq.write_table(table, buffer, compression="snappy")
     return buffer.getvalue()
-
-
-def parquet_bytes_to_frame(data: bytes) -> pd.DataFrame:
-    return pd.read_parquet(io.BytesIO(data), engine="pyarrow")

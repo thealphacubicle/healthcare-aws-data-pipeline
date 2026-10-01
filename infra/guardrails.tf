@@ -1,5 +1,5 @@
-# 7. Guardrails: a tiny monthly cost budget that emails at 1% and stops the
-# dashboard instance automatically when actual spend reaches 100%.
+# 7. Guardrails: a monthly cost budget (default $5) that emails at 1% and
+# stops the dashboard instance automatically when actual spend reaches 100%.
 #
 # Budgets data refreshes a few times a day, so this is a backstop, not a
 # real-time kill switch. Free Tier usage alerts have no API; turn them on in

@@ -1,4 +1,5 @@
 import io
+import json
 from datetime import date
 
 import pandas as pd
@@ -10,7 +11,7 @@ from sample_data import ENCOUNTERS_CSV, FILES, INSURANCE_CSV, PATIENTS_CSV
 
 from healthcare_pipeline.catalog import glue_table_input
 from healthcare_pipeline.config import load_config
-from healthcare_pipeline.transform import handlers
+from healthcare_pipeline.transform import etl
 from healthcare_pipeline.transform.clean import DataQualityError, clean_dataset
 from healthcare_pipeline.transform.derive import compute_derived_fields
 from healthcare_pipeline.transform.join import join_datasets
@@ -94,41 +95,42 @@ def test_curated_parquet_schema_matches_glue_table() -> None:
     assert table.column("birth_date").to_pylist()[0] == date(1980, 6, 15)
 
 
-def test_handlers_run_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_etl_runs_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
     s3 = FakeS3()
-    monkeypatch.setattr(handlers, "_s3", s3)
-    monkeypatch.setenv("CURATED_BUCKET", "curated")
+    monkeypatch.setattr(etl, "_s3", s3)
     raw_prefix = "ingest_date=2026-10-01/run_id=r1"
     for name, content in FILES.items():
         s3.put_object(Bucket="raw", Key=f"{raw_prefix}/{name}", Body=content)
-    manifest = (
-        '{"run_id": "r1", "ingest_date": "2026-10-01", "changed": ["patients"], "datasets": {'
-        f'"patients": "{raw_prefix}/patients.csv", '
-        f'"encounters_summary": "{raw_prefix}/encounters_summary.csv", '
-        f'"insurance": "{raw_prefix}/insurance.csv"}}}}'
+    manifest = {
+        "run_id": "r1",
+        "ingest_date": "2026-10-01",
+        "changed": ["patients"],
+        "datasets": {
+            "patients": f"{raw_prefix}/patients.csv",
+            "encounters_summary": f"{raw_prefix}/encounters_summary.csv",
+            "insurance": f"{raw_prefix}/insurance.csv",
+        },
+    }
+    s3.put_object(
+        Bucket="raw", Key=f"{raw_prefix}/_manifest.json", Body=json.dumps(manifest).encode()
     )
-    s3.put_object(Bucket="raw", Key=f"{raw_prefix}/_manifest.json", Body=manifest.encode())
     s3.put_object(Bucket="curated", Key="tables/patient_summary/part-old.parquet", Body=b"old")
 
-    run = handlers.prepare_run(
-        {"bucket": "raw", "manifest_key": f"{raw_prefix}/_manifest.json"}, None
-    )
-    cleaned = [
-        handlers.clean({"run_id": run["run_id"], "raw_bucket": run["raw_bucket"], **d}, None)
-        for d in run["datasets"]
-    ]
-    joined = handlers.join({"run_id": "r1", "cleaned": cleaned}, None)
-    result = handlers.derive_and_publish(
-        {"run_id": "r1", "ingest_date": run["ingest_date"], "joined_key": joined["joined_key"]},
-        None,
+    result = etl.run_etl(
+        config=CONFIG,
+        raw_bucket="raw",
+        manifest_key=f"{raw_prefix}/_manifest.json",
+        curated_bucket="curated",
     )
 
-    assert result == {
-        "curated_key": "tables/patient_summary/part-r1.parquet",
-        "rows": 3,
-        "columns": 12,
-    }
-    # The previous snapshot and all staging files are removed.
+    assert result["curated_key"] == "tables/patient_summary/part-r1.parquet"
+    assert (result["rows"], result["columns"]) == (3, 12)
+    assert [r["dataset"] for r in result["reports"]] == [
+        "encounters_summary",
+        "insurance",
+        "patients",
+    ]
+    # The previous snapshot is replaced.
     assert s3.keys("curated") == ["tables/patient_summary/part-r1.parquet"]
     table = pq.read_table(io.BytesIO(s3.objects[("curated", result["curated_key"])]))
     assert table.column("age_years").to_pylist() == [46, 16, None]

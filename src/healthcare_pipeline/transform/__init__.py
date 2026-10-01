@@ -1,1 +1,1 @@
-"""ETL steps run by the Step Functions state machine."""
+"""ETL steps run in sequence by the ETL Lambda (see etl.py)."""

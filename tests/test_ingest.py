@@ -11,9 +11,15 @@ from healthcare_pipeline.ingest import STATE_KEY, run_ingestion
 BUCKET = "raw"
 
 
-def _run(drive: FakeDrive, s3: FakeS3, when: datetime) -> dict:
+def _run(drive: FakeDrive, s3: FakeS3, when: datetime, etl_calls: list | None = None) -> dict:
     return run_ingestion(
-        config=load_config(), drive=drive, s3=s3, bucket=BUCKET, folder_id="folder", now=when
+        config=load_config(),
+        drive=drive,
+        s3=s3,
+        bucket=BUCKET,
+        folder_id="folder",
+        start_etl=etl_calls.append if etl_calls is not None else None,
+        now=when,
     )
 
 
@@ -25,9 +31,9 @@ def _drive_with_all_files() -> FakeDrive:
     return drive
 
 
-def test_first_run_uploads_all_files_and_writes_manifest() -> None:
-    drive, s3 = _drive_with_all_files(), FakeS3()
-    result = _run(drive, s3, datetime(2026, 10, 1, 6, tzinfo=UTC))
+def test_first_run_uploads_all_files_writes_manifest_and_starts_etl() -> None:
+    drive, s3, etl_calls = _drive_with_all_files(), FakeS3(), []
+    result = _run(drive, s3, datetime(2026, 10, 1, 6, tzinfo=UTC), etl_calls)
 
     assert result["status"] == "ingested"
     assert result["changed"] == ["encounters_summary", "insurance", "patients"]
@@ -41,14 +47,16 @@ def test_first_run_uploads_all_files_and_writes_manifest() -> None:
     manifest = json.loads(s3.objects[(BUCKET, result["manifest_key"])])
     assert manifest["datasets"]["patients"] == f"{prefix}/patients.csv"
     assert drive.queries == [None]
+    assert etl_calls == [{"bucket": BUCKET, "manifest_key": result["manifest_key"]}]
 
 
 def test_unchanged_files_are_not_reingested() -> None:
-    drive, s3 = _drive_with_all_files(), FakeS3()
+    drive, s3, etl_calls = _drive_with_all_files(), FakeS3(), []
     _run(drive, s3, datetime(2026, 10, 1, 6, tzinfo=UTC))
-    result = _run(drive, s3, datetime(2026, 10, 2, 6, tzinfo=UTC))
+    result = _run(drive, s3, datetime(2026, 10, 2, 6, tzinfo=UTC), etl_calls)
 
     assert result["status"] == "no_changes"
+    assert etl_calls == []
     # The watermark from the first run is used for the incremental query.
     assert drive.queries[-1] == "2026-09-30T10:00:02.000Z"
     assert s3.keys(BUCKET, "ingest_date=2026-10-02") == []
@@ -68,14 +76,15 @@ def test_changed_file_triggers_manifest_with_carried_forward_keys() -> None:
     assert state["watermark"] == "2026-10-01T12:00:00.000Z"
 
 
-def test_incomplete_dataset_set_does_not_write_manifest() -> None:
-    drive, s3 = FakeDrive(), FakeS3()
+def test_incomplete_dataset_set_does_not_write_manifest_or_start_etl() -> None:
+    drive, s3, etl_calls = FakeDrive(), FakeS3(), []
     drive.add("p", "patients.csv", "2026-09-30T10:00:00.000Z", FILES["patients.csv"])
-    result = _run(drive, s3, datetime(2026, 10, 1, 6, tzinfo=UTC))
+    result = _run(drive, s3, datetime(2026, 10, 1, 6, tzinfo=UTC), etl_calls)
 
     assert result["manifest_key"] is None
     assert result["missing"] == ["encounters_summary", "insurance"]
     assert not any(k.endswith("_manifest.json") for k in s3.keys(BUCKET))
+    assert etl_calls == []
 
 
 def test_drive_query_filters_folder_type_and_watermark() -> None:

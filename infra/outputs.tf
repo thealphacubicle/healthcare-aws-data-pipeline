@@ -23,9 +23,9 @@ output "ingest_function" {
   value       = aws_lambda_function.ingest.function_name
 }
 
-output "state_machine_arn" {
-  description = "Step Functions ETL state machine."
-  value       = aws_sfn_state_machine.etl.arn
+output "etl_function" {
+  description = "ETL Lambda (invoked by the ingest Lambda)."
+  value       = aws_lambda_function.etl.function_name
 }
 
 output "dashboard_instance_id" {
@@ -33,7 +33,7 @@ output "dashboard_instance_id" {
   value       = aws_instance.dashboard.id
 }
 
-output "dashboard_port_forward_command" {
-  description = "Open the dashboard at http://localhost:8501 through SSM, with no inbound port."
-  value       = "aws ssm start-session --region ${var.aws_region} --target ${aws_instance.dashboard.id} --document-name AWS-StartPortForwardingSession --parameters portNumber=8501,localPortNumber=8501"
+output "dashboard_url" {
+  description = "Public dashboard URL (the instance's default EC2 DNS name). Changes if the instance is stopped and started."
+  value       = "http://${aws_instance.dashboard.public_dns}"
 }

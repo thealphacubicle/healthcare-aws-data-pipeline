@@ -33,7 +33,7 @@ variable "google_credentials_parameter_name" {
 }
 
 variable "ingest_schedule_expression" {
-  description = "EventBridge schedule for the Drive ingestion Lambda."
+  description = "Schedule expression (EventBridge rule) for the Drive ingestion Lambda."
   type        = string
   default     = "cron(0 6 * * ? *)"
 }
@@ -44,7 +44,7 @@ variable "aws_sdk_pandas_layer_arn" {
 }
 
 variable "transform_memory_mb" {
-  description = "Memory for the transform Lambdas. Raise if the joined dataset grows."
+  description = "Memory for the ETL Lambda. Raise if the joined dataset grows."
   type        = number
   default     = 2048
 }
@@ -74,15 +74,15 @@ variable "dashboard_instance_type" {
 }
 
 variable "dashboard_allowed_cidrs" {
-  description = "CIDR blocks allowed to reach Streamlit on port 8501. Leave empty to allow access only through SSM Session Manager port forwarding."
+  description = "CIDR blocks allowed to open the dashboard over HTTP (port 80). Defaults to the whole internet; narrow to e.g. [\"<your-ip>/32\"] to restrict it."
   type        = list(string)
-  default     = []
+  default     = ["0.0.0.0/0"]
 }
 
 variable "monthly_budget_usd" {
   description = "Monthly AWS Budget limit in USD. The budget action stops the dashboard instance when actual spend reaches it."
   type        = string
-  default     = "0.01"
+  default     = "5"
 }
 
 variable "budget_alert_threshold_percent" {
@@ -92,7 +92,7 @@ variable "budget_alert_threshold_percent" {
 }
 
 variable "log_retention_days" {
-  description = "CloudWatch Logs retention for Lambda and Step Functions logs."
+  description = "CloudWatch Logs retention for Lambda logs."
   type        = number
   default     = 14
 }

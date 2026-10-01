@@ -8,25 +8,26 @@ Google Drive folder
    │  EventBridge schedule → ingest Lambda (incremental, watermark in S3)
    ▼
 S3 raw zone   ingest_date=YYYY-MM-DD/run_id=…/<file>.csv + _manifest.json
-   │  S3 → EventBridge rule on */_manifest.json (one execution per run)
+   │  ingest Lambda invokes the ETL Lambda directly (async, one run per ingestion)
    ▼
-Step Functions: PrepareRun → Map(CleanDataset) → JoinDatasets → DeriveAndPublish
+ETL Lambda: clean each file → join → derive → publish Parquet
    ▼
 S3 curated zone   tables/patient_summary/part-<run_id>.parquet
    │  Glue Data Catalog table, registered once by hand (no crawler)
    ▼
 Athena workgroup (per-query scan cap)  ◄──  Streamlit on EC2 t3.micro
+                                             http://ec2-<ip>.<region>.compute.amazonaws.com
 ```
 
-Guardrails: a $0.01 monthly AWS Budget with a 1% email alert and a budget
-action that stops the EC2 instance at 100%, plus SNS email on ingestion or ETL
+Guardrails: a $5 monthly AWS Budget with a 1% email alert and a budget action
+that stops the EC2 instance at 100%, plus SNS email on ingestion or ETL
 failure.
 
 | Path | Purpose |
 |---|---|
 | `src/healthcare_pipeline/pipeline_config.json` | Declares the master file, supporting files, column types, and derived fields |
 | `src/healthcare_pipeline/ingest.py` | Drive → raw zone Lambda |
-| `src/healthcare_pipeline/transform/` | Clean, join, derive, and Parquet steps run by Step Functions |
+| `src/healthcare_pipeline/transform/` | Clean, join, derive, and Parquet steps; `etl.py` runs them in sequence |
 | `src/healthcare_pipeline/catalog.py`, `scripts/register_table.py` | One-time Glue table registration (DDL or `boto3`) |
 | `app/streamlit_app.py` | Dashboard |
 | `infra/` | Terraform for everything above; see [`infra/README.md`](infra/README.md) to deploy |

@@ -3,9 +3,9 @@
 Each run lists files modified since the stored watermark, uploads new versions
 to ``ingest_date=YYYY-MM-DD/run_id=<id>/<file_name>`` and then writes a
 ``_manifest.json`` next to them. The manifest names the latest S3 copy of
-*every* dataset (unchanged files are carried forward), so the transform always
-joins a complete set. Only the manifest key triggers Step Functions, which
-means one execution per ingestion run rather than one per file.
+*every* dataset (unchanged files are carried forward), so the ETL always joins
+a complete set. The ingest Lambda then invokes the ETL Lambda directly
+(asynchronously) with the manifest location: one ETL run per ingestion run.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -68,6 +69,7 @@ def run_ingestion(
     s3,
     bucket: str,
     folder_id: str,
+    start_etl: Callable[[dict[str, str]], None] | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     now = now or datetime.now(UTC)
@@ -115,6 +117,8 @@ def run_ingestion(
             Body=json.dumps(manifest, indent=2).encode(),
             ContentType="application/json",
         )
+        if start_etl is not None:
+            start_etl({"bucket": bucket, "manifest_key": manifest_key})
 
     # State is written last so a failed run is simply retried next time.
     s3.put_object(Bucket=bucket, Key=STATE_KEY, Body=json.dumps(new_state, indent=2).encode())
@@ -135,6 +139,24 @@ def _google_credentials(parameter_name: str) -> str:
     return ssm.get_parameter(Name=parameter_name, WithDecryption=True)["Parameter"]["Value"]
 
 
+def _lambda_invoker(function_name: str) -> Callable[[dict[str, str]], None]:
+    import boto3
+
+    lambda_client = boto3.client("lambda")
+
+    def invoke(payload: dict[str, str]) -> None:
+        # "Event" = asynchronous: returns once queued; failures go to the
+        # ETL function's on-failure destination (SNS email).
+        lambda_client.invoke(
+            FunctionName=function_name,
+            InvocationType="Event",
+            Payload=json.dumps(payload).encode(),
+        )
+        logger.info("Started ETL %s for s3://%s/%s", function_name, *payload.values())
+
+    return invoke
+
+
 def handler(event: dict, context: Any) -> dict[str, Any]:
     import boto3
 
@@ -149,4 +171,5 @@ def handler(event: dict, context: Any) -> dict[str, Any]:
         s3=boto3.client("s3"),
         bucket=os.environ["RAW_BUCKET"],
         folder_id=os.environ["DRIVE_FOLDER_ID"],
+        start_etl=_lambda_invoker(os.environ["ETL_FUNCTION_NAME"]),
     )

@@ -30,7 +30,6 @@ locals {
   partition  = data.aws_partition.current.partition
   build_dir  = "${path.module}/../build"
 
-  # Prefixes inside the curated bucket; must match transform/handlers.py.
-  curated_tables_prefix  = "tables"
-  curated_staging_prefix = "staging"
+  # Prefix inside the curated bucket for Athena table data.
+  curated_tables_prefix = "tables"
 }

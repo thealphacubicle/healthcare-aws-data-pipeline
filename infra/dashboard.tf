@@ -1,7 +1,9 @@
-# 6. Serving: Streamlit on a single EC2 instance in the default VPC.
-# By default no inbound port is open; reach the app with SSM Session Manager
-# port forwarding (see infra/README.md). The public IP is only for outbound
-# access to SSM, PyPI, and AWS APIs without paying for a NAT gateway.
+# 6. Serving: Streamlit on a single EC2 instance in the default VPC, served on
+# port 80 at the instance's default public DNS name
+# (http://ec2-<ip>.compute-1.amazonaws.com). No domain, load balancer, or
+# Elastic IP: the auto-assigned public IP/DNS changes if the instance is
+# stopped and started (e.g. by the budget action); `terraform output
+# dashboard_url` (after `terraform refresh`) shows the current one.
 
 data "aws_ssm_parameter" "al2023_ami" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
@@ -23,15 +25,12 @@ resource "aws_security_group" "dashboard" {
   description = "Streamlit dashboard"
   vpc_id      = data.aws_vpc.default.id
 
-  dynamic "ingress" {
-    for_each = length(var.dashboard_allowed_cidrs) > 0 ? [1] : []
-    content {
-      description = "Streamlit"
-      from_port   = 8501
-      to_port     = 8501
-      protocol    = "tcp"
-      cidr_blocks = var.dashboard_allowed_cidrs
-    }
+  ingress {
+    description = "Streamlit over HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = var.dashboard_allowed_cidrs
   }
 
   egress {

@@ -91,17 +91,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "curated" {
   bucket = aws_s3_bucket.this["curated"].id
 
   rule {
-    id     = "expire-staging"
-    status = "Enabled"
-    filter {
-      prefix = "${local.curated_staging_prefix}/"
-    }
-    expiration {
-      days = 1
-    }
-  }
-
-  rule {
     id     = "abort-incomplete-uploads"
     status = "Enabled"
     filter {}
@@ -125,12 +114,4 @@ resource "aws_s3_bucket_lifecycle_configuration" "athena_results" {
       days_after_initiation = 1
     }
   }
-}
-
-# S3 notifications cannot target Step Functions directly, so the raw bucket
-# publishes to EventBridge (free for S3 events) and a rule starts the state
-# machine; see orchestration.tf.
-resource "aws_s3_bucket_notification" "raw" {
-  bucket      = aws_s3_bucket.this["raw"].id
-  eventbridge = true
 }

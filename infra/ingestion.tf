@@ -1,5 +1,9 @@
 # 1. Source & ingestion: scheduled Lambda pulls new/changed Drive files into
-# the raw bucket. Run `make build` first to produce build/ingest.zip.
+# the raw bucket, then invokes the ETL Lambda directly. Run `make build` first
+# to produce build/ingest.zip.
+#
+# The schedule itself is an EventBridge rule: it is the only way to run a
+# Lambda on a timer, and scheduled rules are free.
 
 data "aws_iam_policy_document" "lambda_assume" {
   statement {
@@ -39,6 +43,12 @@ data "aws_iam_policy_document" "ingest" {
   }
 
   statement {
+    sid       = "StartEtl"
+    actions   = ["lambda:InvokeFunction"]
+    resources = [aws_lambda_function.etl.arn]
+  }
+
+  statement {
     sid       = "NotifyOnFailure"
     actions   = ["sns:Publish"]
     resources = [aws_sns_topic.alerts.arn]
@@ -71,14 +81,12 @@ resource "aws_lambda_function" "ingest" {
   memory_size      = 512
   timeout          = 300
 
-  # Never run two ingestions at once; they would race on the watermark.
-  reserved_concurrent_executions = 1
-
   environment {
     variables = {
       RAW_BUCKET                   = aws_s3_bucket.this["raw"].id
       DRIVE_FOLDER_ID              = var.drive_folder_id
       GOOGLE_CREDENTIALS_PARAMETER = var.google_credentials_parameter_name
+      ETL_FUNCTION_NAME            = aws_lambda_function.etl.function_name
     }
   }
 
