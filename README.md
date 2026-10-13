@@ -107,16 +107,16 @@ runs Ruff and Terraform formatting automatically before commits.
 ### Codespaces and dev containers
 
 Opening the repository in GitHub Codespaces or a VS Code dev container uses
-`.devcontainer/devcontainer.json`. It provisions Python, `uv`, Terraform, and
-GitHub CLI, then runs `make setup` automatically. After the container finishes
-creating, use `make test` or `make check` from the integrated terminal.
+`.devcontainer/devcontainer.json`. It provisions Python, `uv`, Terraform, the
+AWS CLI, and GitHub CLI, then runs `make setup` automatically. After the
+container finishes creating, use `make test` or `make check` from the
+integrated terminal.
 
-The AWS CLI is installed as `uv tool install awscli` rather than through the
-`aws-cli` dev container feature. That feature installs AWS CLI v2, whose
-prebuilt binary fails to exec in some container images (the kernel can't find
-its ELF interpreter, which surfaces as a confusing `aws: not found` even though
-the file is present). The `awscli` package is v1, pure Python, and covers every
-command this project uses.
+The `uv` feature comes from `ghcr.io/va-h/devcontainers-features`, not the
+official `ghcr.io/devcontainers/features` namespace, which publishes no `uv`
+feature. Pointing it at the official namespace makes the whole container fail
+to build, and Codespaces then silently falls back to an Alpine recovery
+container where the glibc-based AWS CLI cannot run.
 
 ### Common commands
 
