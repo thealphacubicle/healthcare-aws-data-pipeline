@@ -6,10 +6,12 @@
     "ghcr.io/devcontainers/features/terraform:1": {
       "version": "latest"
     },
-    "ghcr.io/devcontainers/features/aws-cli:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "make setup",
+  "postCreateCommand": "make setup && uv tool install awscli",
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/vscode/.local/bin"
+  },
   "customizations": {
     "vscode": {
       "extensions": [
