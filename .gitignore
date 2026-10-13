@@ -16,6 +16,7 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+backend.hcl
 
 # Local environment and editor files
 .env

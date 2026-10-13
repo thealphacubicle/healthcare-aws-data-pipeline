@@ -1,0 +1,9 @@
+# Copy to backend.hcl (gitignored) and fill in with the outputs from
+# `infra/bootstrap` (terraform -chdir=infra/bootstrap output).
+#
+# terraform -chdir=infra init -backend-config=backend.hcl
+
+bucket         = "healthcare-pipeline-tf-state-<account-id>" # bootstrap output: tf_state_bucket
+key            = "healthcare-pipeline/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "healthcare-pipeline-tf-lock" # bootstrap output: tf_lock_table

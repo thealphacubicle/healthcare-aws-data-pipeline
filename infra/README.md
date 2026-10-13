@@ -12,10 +12,18 @@ layers:
 | `dashboard.tf` | 6. EC2 Streamlit host on a public URL |
 | `guardrails.tf` | 7. $5 budget, 1% alert, stop-EC2 budget action |
 
-State is local by default. Configure a remote backend before any shared or
-production deployment.
+State is remote: `backend.tf` declares an S3 backend (with DynamoDB locking)
+left unconfigured on purpose, so the same files work for any account. Run
+`infra/bootstrap` once first — see `infra/bootstrap/README.md` — to create
+that bucket/table (plus the IAM role GitHub Actions deploys with), then feed
+its outputs into `backend.hcl` as below.
 
 ## Deploy
+
+0. **One-time bootstrap.** Follow `infra/bootstrap/README.md` to create the
+   Terraform state bucket/lock table and the GitHub Actions deploy role.
+   Copy `backend.hcl.example` to `backend.hcl` (gitignored) and fill in the
+   bootstrap outputs.
 
 1. **Google credentials.** Create a Google Cloud service account with the Drive
    API enabled, share the Drive folder with the service account's email
@@ -36,8 +44,8 @@ production deployment.
 3. **Build and apply.**
 
    ```bash
-   make build                      # build/ingest.zip, transform.zip, app.zip
-   terraform -chdir=infra init
+   make build                                    # build/ingest.zip, transform.zip, app.zip
+   terraform -chdir=infra init -backend-config=backend.hcl
    terraform -chdir=infra apply
    ```
 
@@ -105,3 +113,45 @@ production deployment.
 - **Snapshot publishing.** Each ETL run writes `part-<run_id>.parquet` and
   then deletes the previous file. A query running at that exact moment can
   briefly see both snapshots.
+
+## CI/CD (GitHub Actions)
+
+`.github/workflows/ci.yml` already runs on every push/PR: lint, format
+checks, tests, build, and `terraform validate`. `.github/workflows/deploy.yml`
+goes further and actually deploys: it plans on pull requests (and posts the
+plan as a PR comment) and applies on merge to `main`, authenticating to AWS
+via OIDC — no long-lived AWS keys stored in GitHub.
+
+### One-time setup
+
+1. **Bootstrap AWS.** Run `infra/bootstrap` once with your own AWS
+   credentials (see `infra/bootstrap/README.md`). It creates the Terraform
+   state bucket/lock table and an IAM role GitHub Actions can assume.
+2. **Repo secret** (Settings → Secrets and variables → Actions → *Secrets*):
+   | Name | Value |
+   |---|---|
+   | `AWS_DEPLOY_ROLE_ARN` | bootstrap output `github_deploy_role_arn` |
+3. **Repo variables** (same page → *Variables*):
+   | Name | Value |
+   |---|---|
+   | `AWS_REGION` | e.g. `us-east-1` |
+   | `TF_STATE_BUCKET` | bootstrap output `tf_state_bucket` |
+   | `TF_STATE_DYNAMODB_TABLE` | bootstrap output `tf_lock_table` |
+   | `ALERT_EMAIL` | same as `terraform.tfvars` |
+   | `DRIVE_FOLDER_ID` | same as `terraform.tfvars` |
+   | `AWS_SDK_PANDAS_LAYER_ARN` | same as `terraform.tfvars` |
+4. **Recommended: require approval before apply.** Create a GitHub
+   Environment named `production` (Settings → Environments) and add yourself
+   as a required reviewer. `deploy.yml`'s apply job targets that environment,
+   so merges to `main` will pause for manual approval before touching real
+   AWS resources.
+
+### Still manual, by design
+
+- The Google service account JSON in Parameter Store (deploy step 1) — a
+  secret that should never pass through Terraform state or CI logs.
+- `scripts/register_table.py --apply --replace` after changing
+  `pipeline_config.json`'s output columns — it's a destructive, infrequent
+  schema change, not something to run on every merge.
+- Approving the `production` environment deployment itself, if you set up
+  the required reviewer step above.
