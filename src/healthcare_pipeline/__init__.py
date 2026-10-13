@@ -1,0 +1,1 @@
+"""Healthcare AWS data pipeline."""

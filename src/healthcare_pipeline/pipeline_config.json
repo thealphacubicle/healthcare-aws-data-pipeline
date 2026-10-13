@@ -1,0 +1,40 @@
+{
+  "output_table": "patient_summary",
+  "join_key": "patient_id",
+  "master": {
+    "name": "patients",
+    "file_name": "patients.csv",
+    "columns": {
+      "patient_id": "string",
+      "birth_date": "date",
+      "sex": "string",
+      "zip3": "string"
+    }
+  },
+  "supporting": [
+    {
+      "name": "encounters_summary",
+      "file_name": "encounters_summary.csv",
+      "columns": {
+        "patient_id": "string",
+        "encounter_count": "bigint",
+        "last_encounter_date": "date",
+        "total_charges": "double"
+      }
+    },
+    {
+      "name": "insurance",
+      "file_name": "insurance.csv",
+      "columns": {
+        "patient_id": "string",
+        "payer_type": "string",
+        "plan_start_date": "date"
+      }
+    }
+  ],
+  "derived": {
+    "age_years": "bigint",
+    "days_since_last_encounter": "bigint",
+    "avg_charge_per_encounter": "double"
+  }
+}

@@ -1,0 +1,51 @@
+#!/bin/bash
+# Installs uv and runs the Streamlit dashboard on port 80 as a systemd service.
+# The unit re-downloads app.zip on every start, so after `terraform apply`
+# updates the code, `sudo systemctl restart dashboard` picks it up.
+set -euo pipefail
+
+dnf install -y unzip
+useradd --system --create-home --home-dir /opt/dashboard dashboard || true
+curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin INSTALLER_NO_MODIFY_PATH=1 sh
+
+cat > /usr/local/bin/dashboard-fetch <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+aws s3 cp --region "${region}" "${app_s3_uri}" /opt/dashboard/app.zip
+rm -rf /opt/dashboard/app
+unzip -q -o /opt/dashboard/app.zip -d /opt/dashboard/app
+SCRIPT
+chmod 755 /usr/local/bin/dashboard-fetch
+
+cat > /etc/systemd/system/dashboard.service <<'UNIT'
+[Unit]
+Description=Streamlit dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=dashboard
+WorkingDirectory=/opt/dashboard
+Environment=HOME=/opt/dashboard
+Environment=AWS_REGION=${region}
+Environment=ATHENA_DATABASE=${database}
+Environment=ATHENA_TABLE=${table}
+Environment=ATHENA_WORKGROUP=${workgroup}
+Environment=PYTHONPATH=/opt/dashboard/app
+# Lets the unprivileged service user bind port 80.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ExecStartPre=/usr/local/bin/dashboard-fetch
+ExecStart=/usr/local/bin/uv run --no-project --python 3.12 \
+  --with "streamlit>=1.40" --with "boto3>=1.35" --with "pandas>=2.2" \
+  streamlit run /opt/dashboard/app/streamlit_app.py \
+  --server.port 80 --server.address 0.0.0.0 --server.headless true \
+  --browser.gatherUsageStats false
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now dashboard

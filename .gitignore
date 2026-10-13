@@ -22,3 +22,5 @@ override.tf.json
 .env.*
 !.env.example
 .DS_Store
+# Deployment bundles from scripts/build_lambdas.py
+build/
