@@ -2,11 +2,10 @@
 
 PYTHON_VERSION := 3.12.11
 UV := uv
-
-.PHONY: setup install test lint fmt fmt-check terraform-fmt terraform-fmt-check check build \
-	terraform-validate deploy register-table-ddl
-
 AWS_REGION ?= us-east-1
+
+.PHONY: setup login deploy install test lint fmt fmt-check terraform-fmt \
+	terraform-fmt-check check build terraform-validate register-table-ddl
 
 setup:
 	@set -eu; \
@@ -22,41 +21,22 @@ setup:
 	$(UV) sync --locked --python $(PYTHON_VERSION); \
 	printf '\033[36m==>\033[0m Installing the pre-commit hook...\n'; \
 	$(UV) run pre-commit install; \
+	if [ ! -f infra/terraform.tfvars ]; then \
+		cp infra/terraform.tfvars.example infra/terraform.tfvars; \
+		printf '\033[36m==>\033[0m Created infra/terraform.tfvars — fill it in before make deploy\n'; \
+	fi; \
 	printf '\033[32m\nSetup complete.\033[0m Activate with: source .venv/bin/activate\n'
 
-install:
-	uv sync --locked --python $(PYTHON_VERSION)
+# Refresh AWS SSO if this profile uses it, then show the account.
+login:
+	@set -eu; \
+	if aws configure get sso_start_url >/dev/null 2>&1 \
+		|| aws configure get sso_session >/dev/null 2>&1; then \
+		aws sso login; \
+	fi; \
+	aws sts get-caller-identity
 
-test:
-	uv run pytest
-
-lint:
-	uv run ruff check .
-
-fmt:
-	uv run ruff format .
-
-terraform-fmt:
-	terraform fmt -recursive
-
-fmt-check:
-	uv run ruff format --check .
-
-terraform-fmt-check:
-	terraform fmt -check -recursive
-
-check: lint fmt-check terraform-fmt-check
-
-build:
-	uv run python scripts/build_lambdas.py
-
-terraform-validate: build
-	terraform -chdir=infra init -backend=false -input=false
-	terraform -chdir=infra validate
-
-# Applies infra/ to the current AWS account. State lives in
-# s3://healthcare-pipeline-tfstate-<account-id>. CI sets CI=true so apply
-# is non-interactive; locally you get the usual Terraform confirm prompt.
+# Build zips and apply infra/. State: s3://healthcare-pipeline-tfstate-<account-id>
 deploy: build
 	@set -eu; \
 	account_id=$$(aws sts get-caller-identity --query Account --output text); \
@@ -83,13 +63,38 @@ deploy: build
 		-backend-config="key=healthcare-pipeline/terraform.tfstate" \
 		-backend-config="region=$(AWS_REGION)" \
 		-backend-config="encrypt=true"; \
-	if [ -n "$${CI:-}" ]; then \
-		terraform -chdir=infra apply -auto-approve -input=false \
-			-var-file=pipeline.tfvars; \
-	else \
-		terraform -chdir=infra apply -input=false \
-			-var-file=pipeline.tfvars; \
-	fi
+	terraform -chdir=infra apply
+
+install:
+	uv sync --locked --python $(PYTHON_VERSION)
+
+test:
+	uv run pytest
+
+lint:
+	uv run ruff check .
+
+fmt:
+	uv run ruff format .
+	terraform fmt -recursive
+
+terraform-fmt:
+	terraform fmt -recursive
+
+fmt-check:
+	uv run ruff format --check .
+
+terraform-fmt-check:
+	terraform fmt -check -recursive
+
+check: lint fmt-check terraform-fmt-check
+
+build:
+	uv run python scripts/build_lambdas.py
+
+terraform-validate: build
+	terraform -chdir=infra init -backend=false -input=false
+	terraform -chdir=infra validate
 
 # Usage: make register-table-ddl BUCKET=<curated-bucket> [DATABASE=healthcare]
 register-table-ddl:

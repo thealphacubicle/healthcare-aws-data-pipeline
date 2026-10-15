@@ -29,7 +29,7 @@ that stops the EC2 instance at 100%.
 | `src/healthcare_pipeline/transform/` | Clean, join, derive, and Parquet steps; `etl.py` runs them in sequence |
 | `src/healthcare_pipeline/catalog.py`, `scripts/register_table.py` | One-time Glue table registration (DDL or `boto3`) |
 | `app/streamlit_app.py` | Dashboard |
-| `infra/` | Terraform; `make deploy` applies it. A merge to `main` does the same in CI. |
+| `infra/` | Terraform; apply locally with `make deploy`. |
 
 ### Adding the supporting files
 
@@ -116,14 +116,14 @@ integrated terminal.
 
 ```bash
 make setup              # Install Python, dependencies, and developer tooling
+make login              # Refresh AWS credentials and print the current account
+make deploy             # Build and apply infra/ (state in S3)
 make test               # Run the test suite
 make lint               # Run Ruff checks
-make fmt                # Format Python files with Ruff
-make terraform-fmt      # Format Terraform files
-make check              # Run lint, Python format, and Terraform format checks
+make fmt                # Format Python and Terraform files
+make check              # Run lint and format checks
 make build              # Build Lambda and dashboard bundles into build/
 make terraform-validate # Build, then terraform init/validate in infra/
-make deploy             # Build and apply infra/ to the current AWS account
 ```
 
 The repository includes shared Copilot custom agents under `.github/agents/`

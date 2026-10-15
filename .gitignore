@@ -12,7 +12,6 @@ crash.log
 crash.*.log
 *.tfvars
 *.tfvars.json
-!infra/pipeline.tfvars
 override.tf
 override.tf.json
 *_override.tf

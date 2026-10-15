@@ -13,23 +13,8 @@ layers:
 | `guardrails.tf` | 7. $5 budget, 1% alert, stop-EC2 budget action |
 
 State lives in `s3://healthcare-pipeline-tfstate-<account-id>`. `make deploy`
-creates that bucket if needed. `make terraform-validate` does not use the
-backend.
-
-## CI/CD
-
-A merge to `main` runs tests, then `make deploy`. Terraform reads
-`pipeline.tfvars` from this directory. GitHub only needs the AWS credentials:
-
-| Secret | Purpose |
-|---|---|
-| `AWS_ACCESS_KEY_ID` | IAM user in the target account |
-| `AWS_SECRET_ACCESS_KEY` | IAM user in the target account |
-
-The IAM user needs permission to manage the pipeline (S3, Lambda, IAM, EC2,
-Glue, Athena, Budgets, SSM, CloudWatch Logs, EventBridge) and the state
-bucket. Create the Google Drive Parameter Store value before the first ingest
-(see below).
+creates that bucket if needed. There is no DynamoDB lock table. CI only lints,
+formats-checks, tests, and validates; it does not apply.
 
 ## Deploy
 
@@ -45,13 +30,15 @@ bucket. Create the Google Drive Parameter Store value before the first ingest
      --value file://service-account.json
    ```
 
-2. **Variables.** Edit `pipeline.tfvars` and commit it.
+2. **Variables.** `make setup` copies `terraform.tfvars.example` to
+   `terraform.tfvars` (gitignored) if needed. Fill it in.
    `aws_sdk_pandas_layer_arn` must be the current AWS SDK for pandas layer ARN
    for your region.
 
-3. **Build and apply.**
+3. **Log in and apply.**
 
    ```bash
+   make login
    make deploy
    ```
 
