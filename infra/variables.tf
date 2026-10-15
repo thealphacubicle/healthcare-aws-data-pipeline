@@ -26,10 +26,10 @@ variable "drive_folder_id" {
   type        = string
 }
 
-variable "google_credentials_parameter_name" {
-  description = "SSM Parameter Store SecureString holding the Google service account JSON. Created outside Terraform so the secret never enters state."
+variable "google_api_key_parameter_name" {
+  description = "SSM Parameter Store SecureString holding the Google API key used to read the public Drive folder. Created outside Terraform so the secret never enters state."
   type        = string
-  default     = "/healthcare-pipeline/google-service-account"
+  default     = "/healthcare-pipeline/google-api-key"
 }
 
 variable "ingest_schedule_expression" {

@@ -7,6 +7,9 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # Bucket/key/region are passed by `make deploy`.
+  backend "s3" {}
 }
 
 provider "aws" {

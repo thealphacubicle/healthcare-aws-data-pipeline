@@ -1,17 +1,16 @@
 """Minimal Google Drive v3 client for incremental pulls from one folder.
 
-Uses ``google-auth`` with ``requests`` directly instead of the full
-``google-api-python-client`` to keep the Lambda package small.
+Uses ``requests`` directly instead of the full ``google-api-python-client``
+to keep the Lambda package small. The folder is public, so an API key is the
+only credential needed.
 """
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Protocol
 
 DRIVE_API = "https://www.googleapis.com/drive/v3"
-DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 GOOGLE_SHEET_MIME = "application/vnd.google-apps.spreadsheet"
 CSV_MIME_TYPES = ("text/csv", GOOGLE_SHEET_MIME)
 
@@ -45,16 +44,13 @@ class GoogleDriveClient:
         self._session = session
 
     @classmethod
-    def from_service_account_info(cls, info: dict | str) -> GoogleDriveClient:
-        from google.auth.transport.requests import AuthorizedSession
-        from google.oauth2 import service_account
+    def from_api_key(cls, api_key: str) -> GoogleDriveClient:
+        import requests
 
-        if isinstance(info, str):
-            info = json.loads(info)
-        credentials = service_account.Credentials.from_service_account_info(
-            info, scopes=DRIVE_SCOPES
-        )
-        return cls(AuthorizedSession(credentials))
+        session = requests.Session()
+        # Merged into every request's query string.
+        session.params = {"key": api_key}
+        return cls(session)
 
     def list_files(self, folder_id: str, modified_since: str | None) -> list[DriveFile]:
         params = {

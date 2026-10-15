@@ -168,7 +168,7 @@ def run_ingestion(
     }
 
 
-def _google_credentials(parameter_name: str) -> str:
+def _google_api_key(parameter_name: str) -> str:
     import boto3
 
     ssm = boto3.client("ssm")
@@ -198,9 +198,7 @@ def handler(event: dict, context: Any) -> dict[str, Any]:
 
     from healthcare_pipeline.drive import GoogleDriveClient
 
-    drive = GoogleDriveClient.from_service_account_info(
-        _google_credentials(os.environ["GOOGLE_CREDENTIALS_PARAMETER"])
-    )
+    drive = GoogleDriveClient.from_api_key(_google_api_key(os.environ["GOOGLE_API_KEY_PARAMETER"]))
     return run_ingestion(
         config=load_config(),
         drive=drive,

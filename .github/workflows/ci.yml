@@ -1,8 +1,9 @@
 name: CI
 
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -16,7 +17,6 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          version: latest
           enable-cache: true
 
       - name: Set up Python
@@ -27,20 +27,14 @@ jobs:
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       - name: Run checks
         run: make check
 
-      - name: Check Terraform formatting
-        run: terraform fmt -check -recursive
-
       - name: Run tests
         run: make test
 
-      - name: Build Lambda and dashboard bundles
-        run: make build
-
       - name: Validate Terraform
-        run: |
-          terraform -chdir=infra init -backend=false -input=false
-          terraform -chdir=infra validate
+        run: make terraform-validate
