@@ -12,40 +12,25 @@ layers:
 | `dashboard.tf` | 6. EC2 Streamlit host on a public URL |
 | `guardrails.tf` | 7. $5 budget, 1% alert, stop-EC2 budget action |
 
-State is stored in S3. GitHub Actions creates that bucket on first deploy to
-`main` (see [CI/CD](#cicd)) and local applies should use the same backend:
-
-```bash
-cp backend.hcl.example backend.hcl   # fill in bucket / region / account id
-terraform -chdir=infra init -backend-config=backend.hcl
-```
-
-`terraform init -backend=false` is enough for format/validate only.
+State lives in `s3://healthcare-pipeline-tfstate-<account-id>`. `make deploy`
+creates that bucket if needed. `make terraform-validate` does not use the
+backend.
 
 ## CI/CD
 
-Merging a pull request into `main` runs `.github/workflows/ci.yml`: validate
-first, then `terraform apply` in the AWS account of `AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY`.
+A merge to `main` runs tests, then `make deploy` in the AWS account of these
+three repository secrets:
 
-Create these repository secrets before the first merge (Settings → Secrets and
-variables → Actions):
+| Secret | Purpose |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | IAM user in the target account |
+| `AWS_SECRET_ACCESS_KEY` | IAM user in the target account |
+| `TERRAFORM_TFVARS` | Contents of `terraform.tfvars` (see `terraform.tfvars.example`) |
 
-| Secret | Required | Purpose |
-|---|---|---|
-| `AWS_ACCESS_KEY_ID` | yes | IAM user in the target account |
-| `AWS_SECRET_ACCESS_KEY` | yes | IAM user in the target account |
-| `ALERT_EMAIL` | yes | Budget alert subscriber (`var.alert_email`) |
-| `DRIVE_FOLDER_ID` | yes | Google Drive folder id (`var.drive_folder_id`) |
-| `AWS_SDK_PANDAS_LAYER_ARN` | yes | AWS SDK for pandas layer ARN for the region |
-| `AWS_REGION` | no | Defaults to `us-east-1` |
-| `TF_STATE_BUCKET` | no | Defaults to `healthcare-pipeline-tfstate-<account-id>` |
-| `TF_STATE_KEY` | no | Defaults to `healthcare-pipeline/terraform.tfstate` |
-
-The IAM user needs permission to manage the pipeline resources (S3, Lambda,
-IAM roles, EC2, Glue, Athena, Budgets, SSM, CloudWatch Logs, EventBridge) plus
-the state bucket. The Google Drive service-account parameter must already
-exist in Parameter Store in that account (see below).
+The IAM user needs permission to manage the pipeline (S3, Lambda, IAM, EC2,
+Glue, Athena, Budgets, SSM, CloudWatch Logs, EventBridge) and the state
+bucket. Create the Google Drive Parameter Store value before the first ingest
+(see below).
 
 ## Deploy
 
@@ -68,9 +53,7 @@ exist in Parameter Store in that account (see below).
 3. **Build and apply.**
 
    ```bash
-   make build                      # build/ingest.zip, transform.zip, app.zip
-   terraform -chdir=infra init
-   terraform -chdir=infra apply
+   make deploy
    ```
 
 4. **Register the curated table (one time).** Print the DDL and run it in the

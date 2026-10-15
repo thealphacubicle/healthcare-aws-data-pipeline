@@ -29,7 +29,7 @@ that stops the EC2 instance at 100%.
 | `src/healthcare_pipeline/transform/` | Clean, join, derive, and Parquet steps; `etl.py` runs them in sequence |
 | `src/healthcare_pipeline/catalog.py`, `scripts/register_table.py` | One-time Glue table registration (DDL or `boto3`) |
 | `app/streamlit_app.py` | Dashboard |
-| `infra/` | Terraform for everything above; see [`infra/README.md`](infra/README.md) to deploy. Merging to `main` applies this stack to the AWS account in GitHub Actions secrets. |
+| `infra/` | Terraform; `make deploy` applies it. A merge to `main` does the same in CI. |
 
 ### Adding the supporting files
 
@@ -123,6 +123,7 @@ make terraform-fmt      # Format Terraform files
 make check              # Run lint, Python format, and Terraform format checks
 make build              # Build Lambda and dashboard bundles into build/
 make terraform-validate # Build, then terraform init/validate in infra/
+make deploy             # Build and apply infra/ to the current AWS account
 ```
 
 The repository includes shared Copilot custom agents under `.github/agents/`

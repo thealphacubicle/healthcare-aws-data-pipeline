@@ -8,9 +8,7 @@ terraform {
     }
   }
 
-  # Partial config: pass bucket/key/region at init time
-  # (GitHub Actions or `terraform init -backend-config=backend.hcl`).
-  # `terraform init -backend=false` still works for local validate.
+  # Bucket/key/region are passed by `make deploy`.
   backend "s3" {}
 }
 
