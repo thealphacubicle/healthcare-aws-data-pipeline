@@ -84,9 +84,11 @@ deploy: build
 		-backend-config="region=$(AWS_REGION)" \
 		-backend-config="encrypt=true"; \
 	if [ -n "$${CI:-}" ]; then \
-		terraform -chdir=infra apply -auto-approve -input=false; \
+		terraform -chdir=infra apply -auto-approve -input=false \
+			-var-file=pipeline.tfvars; \
 	else \
-		terraform -chdir=infra apply -input=false; \
+		terraform -chdir=infra apply -input=false \
+			-var-file=pipeline.tfvars; \
 	fi
 
 # Usage: make register-table-ddl BUCKET=<curated-bucket> [DATABASE=healthcare]

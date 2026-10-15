@@ -18,14 +18,13 @@ backend.
 
 ## CI/CD
 
-A merge to `main` runs tests, then `make deploy` in the AWS account of these
-three repository secrets:
+A merge to `main` runs tests, then `make deploy`. Terraform reads
+`pipeline.tfvars` from this directory. GitHub only needs the AWS credentials:
 
 | Secret | Purpose |
 |---|---|
 | `AWS_ACCESS_KEY_ID` | IAM user in the target account |
 | `AWS_SECRET_ACCESS_KEY` | IAM user in the target account |
-| `TERRAFORM_TFVARS` | Contents of `terraform.tfvars` (see `terraform.tfvars.example`) |
 
 The IAM user needs permission to manage the pipeline (S3, Lambda, IAM, EC2,
 Glue, Athena, Budgets, SSM, CloudWatch Logs, EventBridge) and the state
@@ -46,9 +45,9 @@ bucket. Create the Google Drive Parameter Store value before the first ingest
      --value file://service-account.json
    ```
 
-2. **Variables.** `cp terraform.tfvars.example terraform.tfvars` and fill it
-   in. `aws_sdk_pandas_layer_arn` must be the current AWS SDK for pandas layer
-   ARN for your region.
+2. **Variables.** Edit `pipeline.tfvars` and commit it.
+   `aws_sdk_pandas_layer_arn` must be the current AWS SDK for pandas layer ARN
+   for your region.
 
 3. **Build and apply.**
 

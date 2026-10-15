@@ -69,10 +69,5 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Write Terraform variables
-        env:
-          TERRAFORM_TFVARS: ${{ secrets.TERRAFORM_TFVARS }}
-        run: printf '%s\n' "$TERRAFORM_TFVARS" > infra/terraform.tfvars
-
       - name: Deploy
         run: make deploy
