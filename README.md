@@ -29,7 +29,7 @@ that stops the EC2 instance at 100%.
 | `src/healthcare_pipeline/transform/` | Clean, join, derive, and Parquet steps; `etl.py` runs them in sequence |
 | `src/healthcare_pipeline/catalog.py`, `scripts/register_table.py` | One-time Glue table registration (DDL or `boto3`) |
 | `app/streamlit_app.py` | Dashboard |
-| `infra/` | Terraform for everything above; see [`infra/README.md`](infra/README.md) to deploy |
+| `infra/` | Terraform for everything above; see [`infra/README.md`](infra/README.md) to deploy. Merging to `main` applies this stack to the AWS account in GitHub Actions secrets. |
 
 ### Adding the supporting files
 

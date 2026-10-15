@@ -12,8 +12,40 @@ layers:
 | `dashboard.tf` | 6. EC2 Streamlit host on a public URL |
 | `guardrails.tf` | 7. $5 budget, 1% alert, stop-EC2 budget action |
 
-State is local by default. Configure a remote backend before any shared or
-production deployment.
+State is stored in S3. GitHub Actions creates that bucket on first deploy to
+`main` (see [CI/CD](#cicd)) and local applies should use the same backend:
+
+```bash
+cp backend.hcl.example backend.hcl   # fill in bucket / region / account id
+terraform -chdir=infra init -backend-config=backend.hcl
+```
+
+`terraform init -backend=false` is enough for format/validate only.
+
+## CI/CD
+
+Merging a pull request into `main` runs `.github/workflows/ci.yml`: validate
+first, then `terraform apply` in the AWS account of `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY`.
+
+Create these repository secrets before the first merge (Settings → Secrets and
+variables → Actions):
+
+| Secret | Required | Purpose |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID` | yes | IAM user in the target account |
+| `AWS_SECRET_ACCESS_KEY` | yes | IAM user in the target account |
+| `ALERT_EMAIL` | yes | Budget alert subscriber (`var.alert_email`) |
+| `DRIVE_FOLDER_ID` | yes | Google Drive folder id (`var.drive_folder_id`) |
+| `AWS_SDK_PANDAS_LAYER_ARN` | yes | AWS SDK for pandas layer ARN for the region |
+| `AWS_REGION` | no | Defaults to `us-east-1` |
+| `TF_STATE_BUCKET` | no | Defaults to `healthcare-pipeline-tfstate-<account-id>` |
+| `TF_STATE_KEY` | no | Defaults to `healthcare-pipeline/terraform.tfstate` |
+
+The IAM user needs permission to manage the pipeline resources (S3, Lambda,
+IAM roles, EC2, Glue, Athena, Budgets, SSM, CloudWatch Logs, EventBridge) plus
+the state bucket. The Google Drive service-account parameter must already
+exist in Parameter Store in that account (see below).
 
 ## Deploy
 

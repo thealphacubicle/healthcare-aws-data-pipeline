@@ -1,0 +1,10 @@
+# Copy to backend.hcl (gitignored) or pass these values to
+# `terraform init -backend-config=...`.
+#
+# Default names match scripts/ensure_tf_backend.sh:
+#   bucket = healthcare-pipeline-tfstate-<account-id>
+
+bucket  = "healthcare-pipeline-tfstate-ACCOUNT_ID"
+key     = "healthcare-pipeline/terraform.tfstate"
+region  = "us-east-1"
+encrypt = true

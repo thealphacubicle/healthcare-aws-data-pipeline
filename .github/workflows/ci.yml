@@ -1,8 +1,9 @@
 name: CI
 
 on:
-  push:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -27,6 +28,8 @@ jobs:
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
 
       - name: Run checks
         run: make check
@@ -44,3 +47,78 @@ jobs:
         run: |
           terraform -chdir=infra init -backend=false -input=false
           terraform -chdir=infra validate
+
+  deploy:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: terraform-apply
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION || vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+      TF_VAR_drive_folder_id: ${{ secrets.DRIVE_FOLDER_ID }}
+      TF_VAR_aws_sdk_pandas_layer_arn: ${{ secrets.AWS_SDK_PANDAS_LAYER_ARN }}
+      TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET || vars.TF_STATE_BUCKET }}
+      TF_STATE_KEY: ${{ secrets.TF_STATE_KEY || vars.TF_STATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify required Terraform variables
+        run: |
+          set -eu
+          missing=0
+          for name in TF_VAR_alert_email TF_VAR_drive_folder_id TF_VAR_aws_sdk_pandas_layer_arn; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required GitHub secret for ${name}"
+              missing=1
+            fi
+          done
+          if [ "${missing}" -ne 0 ]; then
+            echo "Set ALERT_EMAIL, DRIVE_FOLDER_ID, and AWS_SDK_PANDAS_LAYER_ARN as repository secrets."
+            exit 1
+          fi
+          aws sts get-caller-identity
+
+      - name: Ensure Terraform remote state backend
+        run: bash scripts/ensure_tf_backend.sh
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12.11
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Build Lambda and dashboard bundles
+        run: make build
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform apply
+        run: |
+          terraform -chdir=infra init -input=false \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true"
+          terraform -chdir=infra apply -auto-approve -input=false
+
+      - name: Show Terraform outputs
+        run: terraform -chdir=infra output

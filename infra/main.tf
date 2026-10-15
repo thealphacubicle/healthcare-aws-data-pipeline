@@ -7,6 +7,11 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  # Partial config: pass bucket/key/region at init time
+  # (GitHub Actions or `terraform init -backend-config=backend.hcl`).
+  # `terraform init -backend=false` still works for local validate.
+  backend "s3" {}
 }
 
 provider "aws" {
