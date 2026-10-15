@@ -19,8 +19,8 @@ Athena workgroup (per-query scan cap)  ◄──  Streamlit on EC2 t3.micro
                                              http://ec2-<ip>.<region>.compute.amazonaws.com
 ```
 
-Guardrails: a $5 monthly AWS Budget with a 1% email alert and a budget action
-that stops the EC2 instance at 100%.
+Guardrails: a $5 monthly AWS Budget with a 1% email alert. At 100% actual
+spend it shuts down pipeline compute (EC2, ingest schedule, Lambdas, Athena).
 
 | Path | Purpose |
 |---|---|
@@ -62,12 +62,13 @@ For a local checkout, install:
 
 - Python tooling: [uv](https://docs.astral.sh/uv/)
 - GNU Make
-- Terraform 1.8 or later
 - Git
+- [Homebrew](https://brew.sh/) (used by `make setup` to install Terraform and the AWS CLI if they are missing)
 
 Python 3.12.11 does not need to be installed separately. `make setup` asks `uv`
-to install that exact version when it is not already available. No AWS account,
-credentials, or real healthcare data are needed to complete setup.
+to install that exact version when it is not already available. No real
+healthcare data is needed to complete setup. AWS login runs at the end of
+setup when credentials are already configured.
 
 ### 2. Bootstrap the project
 
@@ -80,10 +81,12 @@ make setup
 This single command:
 
 1. Checks that `uv` is available.
-2. Installs Python 3.14.2 through `uv` if necessary.
-3. Recreates `.venv` with Python 3.14.2.
+2. Installs Python 3.12.11 through `uv` if necessary.
+3. Recreates `.venv` with Python 3.12.11.
 4. Installs the locked runtime and development dependencies from `pyproject.toml`.
 5. Installs the repository's pre-commit hook.
+6. Installs Terraform and the AWS CLI if they are missing.
+7. Logs in to AWS when credentials are already configured.
 
 The command is safe to rerun. It replaces only the local `.venv`; source files,
 Terraform state, and project data are not modified.
@@ -115,9 +118,11 @@ integrated terminal.
 ### Common commands
 
 ```bash
-make setup              # Install Python, dependencies, and developer tooling
-make login              # Refresh AWS credentials and print the current account
-make deploy             # Build and apply infra/ (state in S3)
+make setup              # Install tooling (including Terraform and AWS CLI) and log in
+make deploy             # Log in, build, and apply infra/ (state in S3)
+make destroy            # Log in, destroy the AWS stack, then log out
+make login              # Run aws configure
+make logout             # Clear the AWS SSO session
 make test               # Run the test suite
 make lint               # Run Ruff checks
 make fmt                # Format Python and Terraform files

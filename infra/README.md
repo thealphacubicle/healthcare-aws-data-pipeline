@@ -10,7 +10,7 @@ layers:
 | `etl.tf` | 2–3. ETL Lambda: clean → join → derive → publish Parquet |
 | `catalog.tf` | 4–5. Glue database (no crawler, no table) and Athena workgroup |
 | `dashboard.tf` | 6. EC2 Streamlit host on a public URL |
-| `guardrails.tf` | 7. $5 budget, 1% alert, stop-EC2 budget action |
+| `guardrails.tf` | 7. $5 budget; at 100% actual spend, shut down pipeline compute |
 
 State lives in `s3://healthcare-pipeline-tfstate-<account-id>`. `make deploy`
 creates that bucket if needed. There is no DynamoDB lock table. CI only lints,
@@ -18,16 +18,17 @@ formats-checks, tests, and validates; it does not apply.
 
 ## Deploy
 
-1. **Google credentials.** Create a Google Cloud service account with the Drive
-   API enabled, share the Drive folder with the service account's email
-   (Viewer), and store its JSON key in Parameter Store. It's created outside
-   Terraform so the secret never enters state. A standard SecureString using
-   the AWS managed key costs nothing:
+1. **Google API key.** The Drive folder must be shared as "Anyone with the
+   link" (Viewer). In Google Cloud Console, enable the Google Drive API for a
+   project, then create an API key under APIs & Services → Credentials
+   (optionally restrict it to the Drive API). Store it in Parameter Store. It's
+   created outside Terraform so the secret never enters state. A standard
+   SecureString using the AWS managed key costs nothing:
 
    ```bash
    aws ssm put-parameter --type SecureString \
-     --name /healthcare-pipeline/google-service-account \
-     --value file://service-account.json
+     --name /healthcare-pipeline/google-api-key \
+     --value 'YOUR_API_KEY'
    ```
 
 2. **Variables.** `make setup` copies `terraform.tfvars.example` to
@@ -35,11 +36,13 @@ formats-checks, tests, and validates; it does not apply.
    `aws_sdk_pandas_layer_arn` must be the current AWS SDK for pandas layer ARN
    for your region.
 
-3. **Log in and apply.**
+3. **Apply or destroy.** Both commands log in to AWS first. `make destroy`
+   logs out when it finishes.
 
    ```bash
-   make login
    make deploy
+   make destroy
+   make logout
    ```
 
 4. **Register the curated table (one time).** Print the DDL and run it in the
@@ -95,14 +98,14 @@ formats-checks, tests, and validates; it does not apply.
   URL changes whenever the instance is stopped and started, for example by the
   budget action. An Elastic IP would keep it fixed but is billed even while the
   instance is stopped.
-- **Budget.** The $5 budget emails at 1% ($0.05) and stops the EC2 instance
-  when actual spend reaches $5. Outside Free Tier, a t3.micro (about
-  $7.50/month) plus its public IPv4 address (about $3.60/month) cost more than
-  $5, so the action may stop the dashboard partway through the month. Start it
-  again from the EC2 console. The action stops only the EC2 instance; S3,
-  Lambda and Athena keep running.
-- **Budgets aren't real time.** Billing data refreshes a few times a day, so
-  spend can overshoot before an alert or action fires.
+- **Budget.** The $5 budget emails at 1% ($0.05) and at 100% actual spend
+  shuts down pipeline compute: stops the dashboard EC2 instance, disables the
+  ingest schedule, freezes the ingest and ETL Lambdas, and disables the Athena
+  workgroup. S3 and Glue stay so data is not deleted. `make deploy` brings
+  compute back. Billing data lags by hours, so spend can overshoot $5 before
+  this fires. Outside Free Tier, a t3.micro (about $7.50/month) plus its
+  public IPv4 address (about $3.60/month) already exceed $5, so the shutdown
+  may happen partway through the month.
 - **Snapshot publishing.** Each ETL run writes `part-<run_id>.parquet` and
   then deletes the previous file. A query running at that exact moment can
   briefly see both snapshots.

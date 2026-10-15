@@ -37,9 +37,9 @@ data "aws_iam_policy_document" "ingest" {
   }
 
   statement {
-    sid       = "ReadGoogleCredentials"
+    sid       = "ReadGoogleApiKey"
     actions   = ["ssm:GetParameter"]
-    resources = ["arn:${local.partition}:ssm:${var.aws_region}:${local.account_id}:parameter/${trimprefix(var.google_credentials_parameter_name, "/")}"]
+    resources = ["arn:${local.partition}:ssm:${var.aws_region}:${local.account_id}:parameter/${trimprefix(var.google_api_key_parameter_name, "/")}"]
   }
 
   statement {
@@ -77,10 +77,10 @@ resource "aws_lambda_function" "ingest" {
 
   environment {
     variables = {
-      RAW_BUCKET                   = aws_s3_bucket.this["raw"].id
-      DRIVE_FOLDER_ID              = var.drive_folder_id
-      GOOGLE_CREDENTIALS_PARAMETER = var.google_credentials_parameter_name
-      ETL_FUNCTION_NAME            = aws_lambda_function.etl.function_name
+      RAW_BUCKET               = aws_s3_bucket.this["raw"].id
+      DRIVE_FOLDER_ID          = var.drive_folder_id
+      GOOGLE_API_KEY_PARAMETER = var.google_api_key_parameter_name
+      ETL_FUNCTION_NAME        = aws_lambda_function.etl.function_name
     }
   }
 
@@ -96,6 +96,7 @@ resource "aws_cloudwatch_event_rule" "ingest_schedule" {
   name                = "${local.name}-ingest-schedule"
   description         = "Incremental Google Drive pull into the raw zone."
   schedule_expression = var.ingest_schedule_expression
+  state               = "ENABLED"
 }
 
 resource "aws_cloudwatch_event_target" "ingest_schedule" {

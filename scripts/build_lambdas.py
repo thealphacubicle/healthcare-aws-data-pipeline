@@ -1,8 +1,9 @@
 """Build the deployment bundles that Terraform uploads.
 
-    build/ingest.zip     healthcare_pipeline + google-auth/requests (Linux wheels)
+    build/ingest.zip     healthcare_pipeline + requests (Linux wheels)
     build/transform.zip  healthcare_pipeline only; pandas/pyarrow come from the
                          AWS SDK for pandas Lambda layer, boto3 from the runtime
+    build/budget.zip     healthcare_pipeline only; budget-shutdown Lambda
     build/app.zip        Streamlit app + healthcare_pipeline for the EC2 host
 
 Run with ``make build``. Zips are written deterministically so unchanged code
@@ -89,6 +90,11 @@ def main() -> None:
         transform.mkdir()
         _copy_package(transform)
         _zip_dir(transform, BUILD / "transform.zip")
+
+        budget = tmp_path / "budget"
+        budget.mkdir()
+        _copy_package(budget)
+        _zip_dir(budget, BUILD / "budget.zip")
 
         app = tmp_path / "app"
         app.mkdir()
